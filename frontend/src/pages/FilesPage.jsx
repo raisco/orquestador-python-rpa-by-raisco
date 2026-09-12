@@ -194,11 +194,14 @@ export default function FilesPage() {
                 </>
               )}
             </Stack>
-            <Box sx={{ p: 2, minHeight: 460, maxHeight: 560, overflow: "auto", opacity: loading ? 0.6 : 1 }}>
+            <Box sx={{
+              p: 2, minHeight: 460, maxHeight: 560, overflow: "auto", opacity: loading ? 0.6 : 1,
+              bgcolor: "#0F172A", color: "#E2E8F0",
+            }}>
               {evidence.length === 0 && (
-                <Stack alignItems="center" justifyContent="center" spacing={1} sx={{ py: 6, color: "text.secondary" }}>
+                <Stack alignItems="center" justifyContent="center" spacing={1} sx={{ py: 6, color: "#8A8F98" }}>
                   <FolderOffOutlinedIcon sx={{ fontSize: 40, opacity: 0.5 }} />
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{ color: "#8A8F98" }}>
                     {selExec ? "Esta corrida no adjuntó archivos." : "Elegí una corrida a la izquierda."}
                   </Typography>
                 </Stack>
@@ -206,18 +209,18 @@ export default function FilesPage() {
               <Stack spacing={1.5}>
                 {evidence.map((ev) => (
                   <Stack key={ev.id} direction="row" spacing={1} alignItems="center">
-                    <FileIcon fontSize="small" color="action" />
+                    <FileIcon fontSize="small" sx={{ color: "#8A8F98" }} />
                     <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                       <Link href={EVIDENCE_URL(ev.id)} target="_blank" rel="noreferrer" variant="body2"
-                        sx={{ wordBreak: "break-all" }}>
+                        sx={{ wordBreak: "break-all", color: "#7DD3FC" }}>
                         {ev.filename}
                       </Link>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                      <Typography variant="caption" sx={{ display: "block", color: "#8A8F98" }}>
                         {(ev.size / 1024).toFixed(1)} KB · {fmtDateTime(ev.created_at)}
                       </Typography>
                       {(ev.content_type || "").startsWith("image/") && (
                         <Box component="img" src={EVIDENCE_URL(ev.id)} alt={ev.filename}
-                          sx={{ display: "block", mt: 0.5, maxWidth: 360, border: 1, borderColor: "divider", borderRadius: 1 }} />
+                          sx={{ display: "block", mt: 0.5, maxWidth: 360, border: 1, borderColor: "#2A323C", borderRadius: 1 }} />
                       )}
                     </Box>
                   </Stack>
