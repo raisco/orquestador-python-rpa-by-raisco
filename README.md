@@ -42,6 +42,12 @@ Demo de concurrencia real (varios workers tomando ítems de la misma cola):
 docker compose up --build --scale worker=3
 ```
 
+El proceso "Reporte Rápido con Credencial" necesita que exista una credencial
+`sistema_demo` en Bóveda de credenciales > Nueva (usuario/contraseña, lo que
+quieras) antes de ejecutarlo — así muestra el flujo completo: leer un secreto
+de la bóveda cifrada, usarlo, y generar un archivo de salida sin exponer la
+contraseña en logs ni en el output.
+
 ## Arquitectura
 
 | Servicio | Rol |

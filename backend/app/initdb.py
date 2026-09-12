@@ -26,6 +26,10 @@ SEED_PROCESSES = [
     dict(key="rpa_challenge_performer", name="RPA Challenge — Performer", kind="performer",
          description="Consume la cola rpa_challenge y completa el formulario. Se escala con N workers.",
          bot_dir="rpa_challenge", entrypoint="performer.py", queue=SEED_QUEUE, max_concurrency=3),
+    dict(key="reporte_rapido", name="Reporte Rapido con Credencial", kind="standalone",
+         description="Toma la credencial 'sistema_demo' de la boveda y genera un reporte de texto "
+                      "adjunto a la ejecucion. Requiere crear esa credencial en Boveda > Nueva.",
+         bot_dir="reporte_rapido", entrypoint="main.py", queue=None, max_concurrency=1),
 ]
 
 # Columnas agregadas después de la primera versión -> ALTER best-effort.
