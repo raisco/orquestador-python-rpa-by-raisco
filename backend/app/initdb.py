@@ -26,9 +26,6 @@ SEED_PROCESSES = [
     dict(key="rpa_challenge_performer", name="RPA Challenge — Performer", kind="performer",
          description="Consume la cola rpa_challenge y completa el formulario. Se escala con N workers.",
          bot_dir="rpa_challenge", entrypoint="performer.py", queue=SEED_QUEUE, max_concurrency=3),
-    dict(key="banco_ejemplo", name="Extracción Bancaria (simulado)", kind="standalone",
-         description="Bot de ejemplo sin cola: emite logs y termina OK/errores al azar.",
-         bot_dir="banco_ejemplo", entrypoint="main.py", queue=None, max_concurrency=2),
 ]
 
 # Columnas agregadas después de la primera versión -> ALTER best-effort.
