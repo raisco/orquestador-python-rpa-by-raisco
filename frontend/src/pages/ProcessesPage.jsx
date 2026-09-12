@@ -9,6 +9,11 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import LayersIcon from "@mui/icons-material/LayersOutlined";
+import SearchIcon from "@mui/icons-material/SearchOutlined";
+import ClearIcon from "@mui/icons-material/Clear";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import InputAdornment from "@mui/material/InputAdornment";
 
 import usePoll from "../lib/usePoll";
 import groupByQueue from "../lib/groupByQueue";
@@ -32,6 +37,14 @@ export default function ProcessesPage() {
   const [err, setErr] = useState("");
   const [running, setRunning] = useState(() => new Set());
   const [toast, setToast] = useState(null); // { severity, message }
+  const [search, setSearch] = useState("");
+  const [collapsed, setCollapsed] = useState(() => new Set());
+
+  const toggleGroup = (key) => setCollapsed((s) => {
+    const n = new Set(s);
+    if (n.has(key)) n.delete(key); else n.add(key);
+    return n;
+  });
 
   const folders = Object.keys(botScripts || {});
   const filesForFolder = (botScripts || {})[form.bot_dir] || [];
@@ -91,15 +104,41 @@ export default function ProcessesPage() {
     refresh();
   };
 
+  const q = search.trim().toLowerCase();
+  const matches = (p) => !q || [p.name, p.key, p.bot_dir, p.entrypoint].join(" ").toLowerCase().includes(q);
+  const visibleProcs = (procs || []).filter(matches);
+  const searching = q.length > 0;
+
   const { groups, loose } = groupByQueue(procs || []);
+  const { groups: visibleGroups, loose: visibleLoose } = groupByQueue(visibleProcs);
   const showVersionCol = (procs || []).some((p) => p.active_version);
   const showChainedCol = (procs || []).some((p) => p.after_process_name);
+  const noResults = searching && visibleProcs.length === 0;
 
   return (
     <Stack spacing={2}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between">
+      <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1}>
         <Typography variant="h5">Procesos</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpen(true)}>Nuevo proceso</Button>
+        <Stack direction="row" spacing={1.5}>
+          <TextField
+            size="small"
+            placeholder="Buscar por nombre, key o entrypoint…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            sx={{ minWidth: 280 }}
+            slotProps={{
+              input: {
+                startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>,
+                endAdornment: search && (
+                  <InputAdornment position="end">
+                    <IconButton size="small" onClick={() => setSearch("")}><ClearIcon fontSize="small" /></IconButton>
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpen(true)}>Nuevo proceso</Button>
+        </Stack>
       </Stack>
 
       <Grid container spacing={2}>
@@ -130,28 +169,35 @@ export default function ProcessesPage() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {[...groups.entries()].map(([queueName, group]) => (
-              <GroupSection
-                key={queueName}
-                label={queueName}
-                count={group.length}
-                onRunGroup={() => runGroup(queueName, group)}
-                colSpan={6 + showVersionCol + showChainedCol}
-              >
-                {group.map((p) => (
-                  <ProcRow key={p.id} p={p} navigate={navigate} onRun={runOne(p)}
-                    onDelete={() => removeOne(p)} isRunning={running.has(p.id)}
-                    showVersionCol={showVersionCol} showChainedCol={showChainedCol} />
-                ))}
-              </GroupSection>
-            ))}
+            {[...visibleGroups.entries()].map(([queueName, group]) => {
+              const expanded = searching || !collapsed.has(queueName);
+              return (
+                <GroupSection
+                  key={queueName}
+                  label={queueName}
+                  count={group.length}
+                  expanded={expanded}
+                  onToggle={() => toggleGroup(queueName)}
+                  onRunGroup={() => runGroup(queueName, groups.get(queueName) || group)}
+                  colSpan={6 + showVersionCol + showChainedCol}
+                >
+                  {expanded && group.map((p) => (
+                    <ProcRow key={p.id} p={p} navigate={navigate} onRun={runOne(p)}
+                      onDelete={() => removeOne(p)} isRunning={running.has(p.id)}
+                      showVersionCol={showVersionCol} showChainedCol={showChainedCol} />
+                  ))}
+                </GroupSection>
+              );
+            })}
 
-            {loose.length > 0 && (
+            {visibleLoose.length > 0 && (
               <GroupSection
-                label="Sin cola asociada" count={loose.length} muted
+                label="Sin cola asociada" count={visibleLoose.length} muted
+                expanded={searching || !collapsed.has("__loose__")}
+                onToggle={() => toggleGroup("__loose__")}
                 colSpan={6 + showVersionCol + showChainedCol}
               >
-                {loose.map((p) => (
+                {(searching || !collapsed.has("__loose__")) && visibleLoose.map((p) => (
                   <ProcRow key={p.id} p={p} navigate={navigate} onRun={runOne(p)}
                     onDelete={() => removeOne(p)} isRunning={running.has(p.id)}
                     showVersionCol={showVersionCol} showChainedCol={showChainedCol} />
@@ -162,6 +208,13 @@ export default function ProcessesPage() {
             {(procs || []).length === 0 && (
               <TableRow><TableCell colSpan={7 + showVersionCol + showChainedCol}>
                 <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>Sin procesos.</Typography>
+              </TableCell></TableRow>
+            )}
+            {noResults && (
+              <TableRow><TableCell colSpan={7 + showVersionCol + showChainedCol}>
+                <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+                  Ningún proceso coincide con "{search}".
+                </Typography>
               </TableCell></TableRow>
             )}
           </TableBody>
@@ -219,19 +272,23 @@ export default function ProcessesPage() {
   );
 }
 
-function GroupSection({ label, count, onRunGroup, muted, colSpan, children }) {
+function GroupSection({ label, count, onRunGroup, muted, colSpan, expanded, onToggle, children }) {
   return (
     <>
-      <TableRow sx={{ bgcolor: "action.hover" }}>
+      <TableRow sx={{ bgcolor: "action.hover", cursor: onToggle ? "pointer" : "default" }} onClick={onToggle}>
         <TableCell colSpan={colSpan} sx={{ py: 1 }}>
           <Stack direction="row" spacing={1.5} alignItems="center">
+            <IconButton size="small" onClick={onToggle} sx={{ p: 0.25 }}>
+              {expanded ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
+            </IconButton>
             <LayersIcon fontSize="small" color={muted ? "disabled" : "action"} />
             <Typography variant="subtitle2" color={muted ? "text.secondary" : "text.primary"} sx={{ flexGrow: 1 }}>
               {label}
             </Typography>
             <Chip size="small" variant="outlined" label={`${count} proceso(s)`} />
             {onRunGroup && (
-              <Button size="small" variant="contained" startIcon={<PlayArrowIcon />} onClick={onRunGroup}>
+              <Button size="small" variant="contained" startIcon={<PlayArrowIcon />}
+                onClick={(e) => { e.stopPropagation(); onRunGroup(); }}>
                 Ejecutar todos
               </Button>
             )}

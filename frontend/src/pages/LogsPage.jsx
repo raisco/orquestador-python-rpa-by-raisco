@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  Stack, Typography, Paper, List, ListItemButton, ListItemText, Box, Chip,
-  Grid, IconButton, Tooltip, TextField, MenuItem,
+  Stack, Typography, Paper, List, ListItemButton, ListItemText, ListItemIcon, Box, Chip,
+  Grid, IconButton, Tooltip, TextField, MenuItem, Checkbox, Button,
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import DownloadIcon from "@mui/icons-material/DownloadOutlined";
@@ -14,7 +14,7 @@ import usePoll from "../lib/usePoll";
 import { fmtDateTime, copyText } from "../lib/format";
 import StatusChip from "../components/StatusChip";
 import { JsonLinesBlock } from "../components/JsonHighlight";
-import http, { fetchExecutions, fetchExecutionLog, fetchProcesses, fetchQueues, deleteExecution } from "../api";
+import http, { fetchExecutions, fetchExecutionLog, fetchProcesses, fetchQueues, deleteExecution, deleteExecutions } from "../api";
 
 export default function LogsPage() {
   const [sp, setSp] = useSearchParams();
@@ -32,6 +32,7 @@ export default function LogsPage() {
   const [log, setLog] = useState("");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [checked, setChecked] = useState(() => new Set());
 
   const setFilter = (key, value) => {
     const next = new URLSearchParams(sp);
@@ -87,6 +88,26 @@ export default function LogsPage() {
     refreshExecs();
   };
 
+  const deletable = (execs || []).filter((e) => e.status !== "RUNNING");
+  const toggleCheck = (id) => setChecked((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+  const allChecked = deletable.length > 0 && deletable.every((e) => checked.has(e.id));
+  const someChecked = deletable.some((e) => checked.has(e.id));
+  const toggleAll = () => setChecked(allChecked ? new Set() : new Set(deletable.map((e) => e.id)));
+
+  const removeSelected = async () => {
+    const ids = [...checked];
+    if (ids.length === 0) return;
+    if (!window.confirm(`¿Borrar ${ids.length} ejecución(es) y sus logs del disco? Esta acción no se puede deshacer.`)) return;
+    await deleteExecutions(ids);
+    if (ids.includes(sel)) { setSel(null); setLog(""); }
+    setChecked(new Set());
+    refreshExecs();
+  };
+
   return (
     <Stack spacing={2}>
       <Box>
@@ -113,9 +134,31 @@ export default function LogsPage() {
       <Grid container spacing={2}>
         <Grid item xs={12} md={4}>
           <Paper variant="outlined" sx={{ maxHeight: 560, overflow: "auto" }}>
+            {(execs || []).length > 0 && (
+              <Stack direction="row" alignItems="center" spacing={1}
+                sx={{ px: 1, py: 0.5, borderBottom: 1, borderColor: "divider", position: "sticky", top: 0, bgcolor: "background.paper", zIndex: 1 }}>
+                <Checkbox size="small" checked={allChecked} indeterminate={someChecked && !allChecked} onChange={toggleAll} />
+                {checked.size > 0 ? (
+                  <>
+                    <Typography variant="caption" color="text.secondary" sx={{ flexGrow: 1 }}>
+                      {checked.size} seleccionada(s)
+                    </Typography>
+                    <Button size="small" color="error" startIcon={<DeleteIcon fontSize="small" />} onClick={removeSelected}>
+                      Borrar
+                    </Button>
+                  </>
+                ) : (
+                  <Typography variant="caption" color="text.secondary">Seleccionar todos</Typography>
+                )}
+              </Stack>
+            )}
             <List dense disablePadding>
               {(execs || []).map((e) => (
                 <ListItemButton key={e.id} selected={e.id === sel} onClick={() => setSel(e.id)}>
+                  <ListItemIcon sx={{ minWidth: 36 }} onClick={(ev) => ev.stopPropagation()}>
+                    <Checkbox size="small" edge="start" checked={checked.has(e.id)}
+                      disabled={e.status === "RUNNING"} onChange={() => toggleCheck(e.id)} />
+                  </ListItemIcon>
                   <ListItemText
                     primary={
                       <Stack direction="row" spacing={1} alignItems="center">

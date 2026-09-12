@@ -1,17 +1,18 @@
 import React, { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  Stack, Typography, Paper, List, ListItemButton, ListItemText, Box,
-  Grid, IconButton, Tooltip, TextField, MenuItem, Link,
+  Stack, Typography, Paper, List, ListItemButton, ListItemText, ListItemIcon, Box,
+  Grid, IconButton, Tooltip, TextField, MenuItem, Link, Checkbox, Button,
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import FileIcon from "@mui/icons-material/InsertDriveFileOutlined";
 import FolderOffOutlinedIcon from "@mui/icons-material/FolderOffOutlined";
+import DeleteIcon from "@mui/icons-material/DeleteOutline";
 
 import usePoll from "../lib/usePoll";
 import { fmtDateTime } from "../lib/format";
 import StatusChip from "../components/StatusChip";
-import { fetchExecutions, fetchExecution, fetchProcesses, fetchQueues, EVIDENCE_URL } from "../api";
+import { fetchExecutions, fetchExecution, fetchProcesses, fetchQueues, deleteExecution, deleteExecutions, EVIDENCE_URL } from "../api";
 
 export default function FilesPage() {
   const [sp, setSp] = useSearchParams();
@@ -20,7 +21,7 @@ export default function FilesPage() {
 
   const { data: processes } = usePoll(fetchProcesses, 30000, []);
   const { data: queues } = usePoll(fetchQueues, 30000, []);
-  const { data: execs } = usePoll(
+  const { data: execs, refresh: refreshExecs } = usePoll(
     () => fetchExecutions({ process_id: processId || undefined, queue_id: queueId || undefined, limit: 200 }),
     4000, [processId, queueId],
   );
@@ -28,6 +29,7 @@ export default function FilesPage() {
   const [sel, setSel] = useState(null);
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [checked, setChecked] = useState(() => new Set());
 
   const setFilter = (key, value) => {
     const next = new URLSearchParams(sp);
@@ -69,6 +71,35 @@ export default function FilesPage() {
   const selExec = execs?.find((e) => e.id === sel);
   const evidence = detail?.evidence || [];
 
+  const remove = async () => {
+    if (!selExec) return;
+    if (!window.confirm(`¿Borrar la ejecución #${selExec.id}? Se elimina también sus archivos del disco.`)) return;
+    await deleteExecution(selExec.id);
+    setSel(null);
+    setDetail(null);
+    refreshExecs();
+  };
+
+  const deletable = (execs || []).filter((e) => e.status !== "RUNNING");
+  const toggleCheck = (id) => setChecked((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+  const allChecked = deletable.length > 0 && deletable.every((e) => checked.has(e.id));
+  const someChecked = deletable.some((e) => checked.has(e.id));
+  const toggleAll = () => setChecked(allChecked ? new Set() : new Set(deletable.map((e) => e.id)));
+
+  const removeSelected = async () => {
+    const ids = [...checked];
+    if (ids.length === 0) return;
+    if (!window.confirm(`¿Borrar ${ids.length} ejecución(es) y sus archivos del disco? Esta acción no se puede deshacer.`)) return;
+    await deleteExecutions(ids);
+    if (ids.includes(sel)) { setSel(null); setDetail(null); }
+    setChecked(new Set());
+    refreshExecs();
+  };
+
   return (
     <Stack spacing={2}>
       <Box>
@@ -95,9 +126,31 @@ export default function FilesPage() {
       <Grid container spacing={2}>
         <Grid item xs={12} md={4}>
           <Paper variant="outlined" sx={{ maxHeight: 560, overflow: "auto" }}>
+            {(execs || []).length > 0 && (
+              <Stack direction="row" alignItems="center" spacing={1}
+                sx={{ px: 1, py: 0.5, borderBottom: 1, borderColor: "divider", position: "sticky", top: 0, bgcolor: "background.paper", zIndex: 1 }}>
+                <Checkbox size="small" checked={allChecked} indeterminate={someChecked && !allChecked} onChange={toggleAll} />
+                {checked.size > 0 ? (
+                  <>
+                    <Typography variant="caption" color="text.secondary" sx={{ flexGrow: 1 }}>
+                      {checked.size} seleccionada(s)
+                    </Typography>
+                    <Button size="small" color="error" startIcon={<DeleteIcon fontSize="small" />} onClick={removeSelected}>
+                      Borrar
+                    </Button>
+                  </>
+                ) : (
+                  <Typography variant="caption" color="text.secondary">Seleccionar todos</Typography>
+                )}
+              </Stack>
+            )}
             <List dense disablePadding>
               {(execs || []).map((e) => (
                 <ListItemButton key={e.id} selected={e.id === sel} onClick={() => setSel(e.id)}>
+                  <ListItemIcon sx={{ minWidth: 36 }} onClick={(ev) => ev.stopPropagation()}>
+                    <Checkbox size="small" edge="start" checked={checked.has(e.id)}
+                      disabled={e.status === "RUNNING"} onChange={() => toggleCheck(e.id)} />
+                  </ListItemIcon>
                   <ListItemText
                     primary={
                       <Stack direction="row" spacing={1} alignItems="center">
@@ -127,9 +180,18 @@ export default function FilesPage() {
                 {selExec ? `Ejecución #${selExec.id} — ${selExec.process_name}` : "Elegí una corrida"}
               </Typography>
               {selExec && (
-                <Tooltip title="Refrescar">
-                  <IconButton size="small" onClick={() => load(sel)}><RefreshIcon fontSize="small" /></IconButton>
-                </Tooltip>
+                <>
+                  <Tooltip title="Refrescar">
+                    <IconButton size="small" onClick={() => load(sel)}><RefreshIcon fontSize="small" /></IconButton>
+                  </Tooltip>
+                  <Tooltip title={selExec.status === "RUNNING" ? "No se puede borrar una ejecución en curso" : "Borrar ejecución y sus archivos del disco"}>
+                    <span>
+                      <IconButton size="small" color="error" disabled={selExec.status === "RUNNING"} onClick={remove} sx={{ ml: 1 }}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                </>
               )}
             </Stack>
             <Box sx={{ p: 2, minHeight: 460, maxHeight: 560, overflow: "auto", opacity: loading ? 0.6 : 1 }}>
