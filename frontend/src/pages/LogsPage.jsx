@@ -8,12 +8,13 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import DownloadIcon from "@mui/icons-material/DownloadOutlined";
 import CopyIcon from "@mui/icons-material/ContentCopyOutlined";
 import CheckIcon from "@mui/icons-material/Check";
+import DeleteIcon from "@mui/icons-material/DeleteOutline";
 
 import usePoll from "../lib/usePoll";
 import { fmtDateTime, copyText } from "../lib/format";
 import StatusChip from "../components/StatusChip";
 import { JsonLinesBlock } from "../components/JsonHighlight";
-import http, { fetchExecutions, fetchExecutionLog, fetchProcesses, fetchQueues } from "../api";
+import http, { fetchExecutions, fetchExecutionLog, fetchProcesses, fetchQueues, deleteExecution } from "../api";
 
 export default function LogsPage() {
   const [sp, setSp] = useSearchParams();
@@ -22,7 +23,7 @@ export default function LogsPage() {
 
   const { data: processes } = usePoll(fetchProcesses, 30000, []);
   const { data: queues } = usePoll(fetchQueues, 30000, []);
-  const { data: execs } = usePoll(
+  const { data: execs, refresh: refreshExecs } = usePoll(
     () => fetchExecutions({ process_id: processId || undefined, queue_id: queueId || undefined, limit: 200 }),
     4000, [processId, queueId],
   );
@@ -76,6 +77,15 @@ export default function LogsPage() {
   };
 
   const selExec = execs?.find((e) => e.id === sel);
+
+  const remove = async () => {
+    if (!selExec) return;
+    if (!window.confirm(`¿Borrar la ejecución #${selExec.id}? Se elimina también su log del disco.`)) return;
+    await deleteExecution(selExec.id);
+    setSel(null);
+    setLog("");
+    refreshExecs();
+  };
 
   return (
     <Stack spacing={2}>
@@ -147,6 +157,13 @@ export default function LogsPage() {
                       href={`${http.defaults.baseURL}/executions/${selExec.id}/log?download=1`}>
                       <DownloadIcon fontSize="small" />
                     </IconButton>
+                  </Tooltip>
+                  <Tooltip title={selExec.status === "RUNNING" ? "No se puede borrar una ejecución en curso" : "Borrar ejecución y su log del disco"}>
+                    <span>
+                      <IconButton size="small" color="error" disabled={selExec.status === "RUNNING"} onClick={remove}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </span>
                   </Tooltip>
                 </>
               )}
