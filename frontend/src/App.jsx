@@ -2,7 +2,6 @@ import React, { useContext } from "react";
 import { Routes, Route, Link as RouterLink, useLocation } from "react-router-dom";
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
-import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
@@ -12,6 +11,7 @@ import LightModeIcon from "@mui/icons-material/WbSunnyOutlined";
 
 import ColorModeContext from "./ColorModeContext";
 
+import Logo from "./components/Logo";
 import NavDrawer, { DRAWER_WIDTH } from "./components/NavDrawer";
 import ErrorBoundary from "./components/ErrorBoundary";
 import DashboardPage from "./pages/DashboardPage";
@@ -40,13 +40,11 @@ export default function App() {
             component={RouterLink}
             to="/"
             sx={{
-              display: "flex", alignItems: "center", gap: 1.25, mr: 2,
+              display: "flex", alignItems: "center", mr: 2,
               textDecoration: "none", color: "inherit",
             }}
           >
-            <Typography variant="subtitle1" sx={{ fontWeight: 600, color: "text.primary" }}>
-              Orquestador de Automatizaciones
-            </Typography>
+            <Logo />
           </Box>
           <Box sx={{ flexGrow: 1 }} />
           <Tooltip title={isDark ? "Modo día" : "Modo noche"}>
