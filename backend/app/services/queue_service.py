@@ -36,9 +36,7 @@ def _purge_evidence_files(db: Session, item_ids: list[str]) -> None:
         select(models.Evidence.storage_key).where(models.Evidence.item_id.in_(item_ids))
     ).all():
         try:
-            p = storage.path_for(storage_key)
-            if p.exists():
-                p.unlink()
+            storage.delete(storage_key)
         except Exception:
             pass
 

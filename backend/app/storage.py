@@ -43,3 +43,15 @@ def read_bytes(storage_key: str) -> bytes:
 
 def exists(storage_key: str) -> bool:
     return (ROOT / storage_key).exists()
+
+
+def delete(storage_key: str) -> None:
+    """Borra el archivo y, si quedan vacías, las carpetas contenedoras
+    (ej. evidence/executions/<id>/) hasta llegar a ROOT."""
+    p = ROOT / storage_key
+    if p.exists():
+        p.unlink()
+    d = p.parent
+    while d != ROOT and d.is_relative_to(ROOT) and d.exists() and not any(d.iterdir()):
+        d.rmdir()
+        d = d.parent

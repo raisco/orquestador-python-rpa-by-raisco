@@ -31,16 +31,12 @@ class DeleteExecutionsIn(BaseModel):
 def _delete_one(db: Session, e: models.Execution) -> None:
     if e.log_path:
         try:
-            p = storage.path_for(e.log_path)
-            if p.exists():
-                p.unlink()
+            storage.delete(e.log_path)
         except Exception:
             pass
     for ev in db.scalars(select(models.Evidence).where(models.Evidence.execution_id == e.id)).all():
         try:
-            p = storage.path_for(ev.storage_key)
-            if p.exists():
-                p.unlink()
+            storage.delete(ev.storage_key)
         except Exception:
             pass
     db.execute(delete(models.Evidence).where(models.Evidence.execution_id == e.id))
