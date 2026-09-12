@@ -1,0 +1,89 @@
+# Orquestador de Automatizaciones — stack local completo.
+#
+#   docker compose up --build              -> db + redis + api + worker + beat
+#   docker compose up --build --scale worker=3   -> 3 workers en paralelo (demo de concurrencia)
+#
+# El frontend se corre aparte con `npm run dev` (apunta a http://localhost:8000).
+# La base de datos y los archivos (assets/evidencias/logs/snapshots) quedan
+# en volúmenes/carpetas persistentes.
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: orchestrator
+      POSTGRES_USER: orch
+      POSTGRES_PASSWORD: orch
+    ports: ["5432:5432"]          # expuesto para inspeccionar con DBeaver/psql
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orch -d orchestrator"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redisdata:/data"]
+
+  api:
+    build: ./backend
+    command: sh -c "python -m app.initdb && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    environment:
+      TZ: ${TZ:-America/Argentina/Buenos_Aires}
+      DATABASE_URL: postgresql+psycopg://orch:orch@db/orchestrator
+      REDIS_URL: redis://redis:6379/0
+      STORAGE_DIR: /storage
+      BOTS_DIR: /app/bots
+      SDK_DIR: /app/sdk
+      ORCH_API_URL: http://api:8000
+      WORKER_TOKEN: ${WORKER_TOKEN:-dev-worker-token}
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+    ports: ["8000:8000"]
+    volumes:
+      - ./backend:/app
+      - ./storage:/storage
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_started }
+
+  worker:
+    build: ./backend
+    command: celery -A app.workers.celery_app:celery worker --concurrency=2 -n worker@%h --loglevel=info
+    environment:
+      TZ: ${TZ:-America/Argentina/Buenos_Aires}
+      DATABASE_URL: postgresql+psycopg://orch:orch@db/orchestrator
+      REDIS_URL: redis://redis:6379/0
+      STORAGE_DIR: /storage
+      BOTS_DIR: /app/bots
+      SDK_DIR: /app/sdk
+      ORCH_API_URL: http://api:8000
+      WORKER_TOKEN: ${WORKER_TOKEN:-dev-worker-token}
+    volumes:
+      - ./backend:/app
+      - ./storage:/storage
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_started }
+
+  beat:
+    build: ./backend
+    command: celery -A app.workers.celery_app:celery beat --loglevel=info
+    environment:
+      TZ: ${TZ:-America/Argentina/Buenos_Aires}
+      DATABASE_URL: postgresql+psycopg://orch:orch@db/orchestrator
+      REDIS_URL: redis://redis:6379/0
+      STORAGE_DIR: /storage
+      BOTS_DIR: /app/bots
+      SDK_DIR: /app/sdk
+    volumes:
+      - ./backend:/app
+      - ./storage:/storage
+    depends_on:
+      redis: { condition: service_started }
+      db: { condition: service_healthy }
+
+volumes:
+  pgdata: {}
+  redisdata: {}

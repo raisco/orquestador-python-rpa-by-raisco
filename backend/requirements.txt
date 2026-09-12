@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+sqlalchemy>=2.0
+psycopg[binary]
+alembic
+celery[redis]
+redis
+croniter
+httpx
+python-multipart
+cryptography
+playwright==1.62.0
+requests
+pandas
+openpyxl

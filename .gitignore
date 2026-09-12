@@ -1,0 +1,22 @@
+# Python
+**/venv/
+**/__pycache__/
+*.pyc
+
+# Base de datos local y secretos
+*.db
+*.db-shm
+*.db-wal
+backend/secret.key
+.env
+
+# Almacenamiento de archivos (assets, evidencias, logs, snapshots de versiones)
+/storage/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Editor
+.vscode/
+.idea/
