@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Stack, Typography, Button, Grid, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  MenuItem, IconButton, Chip, Tooltip, Snackbar, Alert, CircularProgress,
+  MenuItem, IconButton, Chip, Tooltip, Snackbar, Alert, CircularProgress, InputAdornment,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
@@ -11,12 +11,8 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import LayersIcon from "@mui/icons-material/LayersOutlined";
 import SearchIcon from "@mui/icons-material/SearchOutlined";
 import ClearIcon from "@mui/icons-material/Clear";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import InputAdornment from "@mui/material/InputAdornment";
 
 import usePoll from "../lib/usePoll";
-import groupByQueue from "../lib/groupByQueue";
 import { apiErrorMessage } from "../lib/apiError";
 import { fmtDateTime } from "../lib/format";
 import ProcessKindChip from "../components/ProcessKindChip";
@@ -38,13 +34,7 @@ export default function ProcessesPage() {
   const [running, setRunning] = useState(() => new Set());
   const [toast, setToast] = useState(null); // { severity, message }
   const [search, setSearch] = useState("");
-  const [collapsed, setCollapsed] = useState(() => new Set());
-
-  const toggleGroup = (key) => setCollapsed((s) => {
-    const n = new Set(s);
-    if (n.has(key)) n.delete(key); else n.add(key);
-    return n;
-  });
+  const [queueFilter, setQueueFilter] = useState("");
 
   const folders = Object.keys(botScripts || {});
   const filesForFolder = (botScripts || {})[form.bot_dir] || [];
@@ -87,10 +77,10 @@ export default function ProcessesPage() {
     }
   });
 
-  const runGroup = async (queueName, group) => {
+  const runFiltered = async () => {
     try {
-      const results = await Promise.all(group.map((p) => runProcess(p.id)));
-      setToast({ severity: "success", message: `${queueName}: ${results.length} ejecución(es) encolada(s)` });
+      const results = await Promise.all(visibleProcs.map((p) => runProcess(p.id)));
+      setToast({ severity: "success", message: `${results.length} ejecución(es) encolada(s)` });
       refresh();
     } catch (e) {
       setToast({ severity: "error", message: apiErrorMessage(e, "No se pudieron ejecutar todos los procesos.") });
@@ -105,53 +95,69 @@ export default function ProcessesPage() {
   };
 
   const q = search.trim().toLowerCase();
-  const matches = (p) => !q || [p.name, p.key, p.bot_dir, p.entrypoint].join(" ").toLowerCase().includes(q);
-  const visibleProcs = (procs || []).filter(matches);
-  const searching = q.length > 0;
+  const matches = (p) => {
+    if (queueFilter === "__none__" ? !!p.queue_name : queueFilter && p.queue_name !== queueFilter) return false;
+    return !q || [p.name, p.key, p.bot_dir, p.entrypoint].join(" ").toLowerCase().includes(q);
+  };
+  const allProcs = procs || [];
+  const visibleProcs = allProcs.filter(matches);
+  const filtering = q.length > 0 || queueFilter.length > 0;
+  const noResults = filtering && visibleProcs.length === 0;
 
-  const { groups, loose } = groupByQueue(procs || []);
-  const { groups: visibleGroups, loose: visibleLoose } = groupByQueue(visibleProcs);
-  const showVersionCol = (procs || []).some((p) => p.active_version);
-  const showChainedCol = (procs || []).some((p) => p.after_process_name);
-  const noResults = searching && visibleProcs.length === 0;
+  const queueNames = [...new Set(allProcs.filter((p) => p.queue_name).map((p) => p.queue_name))];
+  const showVersionCol = allProcs.some((p) => p.active_version);
+  const showChainedCol = allProcs.some((p) => p.after_process_name);
+  const colCount = 7 + showVersionCol + showChainedCol;
 
   return (
     <Stack spacing={2}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1}>
         <Typography variant="h5">Procesos</Typography>
-        <Stack direction="row" spacing={1.5}>
-          <TextField
-            size="small"
-            placeholder="Buscar por nombre, key o entrypoint…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            sx={{ minWidth: 280 }}
-            slotProps={{
-              input: {
-                startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>,
-                endAdornment: search && (
-                  <InputAdornment position="end">
-                    <IconButton size="small" onClick={() => setSearch("")}><ClearIcon fontSize="small" /></IconButton>
-                  </InputAdornment>
-                ),
-              },
-            }}
-          />
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpen(true)}>Nuevo proceso</Button>
-        </Stack>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpen(true)}>Nuevo proceso</Button>
       </Stack>
 
       <Grid container spacing={2}>
         <Grid item xs={6} md={3}>
-          <StatCard label="Procesos" value={(procs || []).length || null} />
+          <StatCard label="Procesos" value={allProcs.length || null} />
         </Grid>
         <Grid item xs={6} md={3}>
-          <StatCard label="Colas en uso" value={groups.size || null} />
+          <StatCard label="Colas en uso" value={queueNames.length || null} />
         </Grid>
         <Grid item xs={6} md={3}>
-          <StatCard label="Sin cola asociada" value={loose.length || null} />
+          <StatCard label="Sin cola asociada" value={allProcs.filter((p) => !p.queue_name).length || null} />
         </Grid>
       </Grid>
+
+      <Stack direction="row" spacing={1.5} flexWrap="wrap" alignItems="center">
+        <TextField
+          size="small"
+          placeholder="Buscar por nombre, key o entrypoint…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ minWidth: 280 }}
+          slotProps={{
+            input: {
+              startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>,
+              endAdornment: search && (
+                <InputAdornment position="end">
+                  <IconButton size="small" onClick={() => setSearch("")}><ClearIcon fontSize="small" /></IconButton>
+                </InputAdornment>
+              ),
+            },
+          }}
+        />
+        <TextField select size="small" label="Cola" value={queueFilter} sx={{ minWidth: 180 }}
+          onChange={(e) => setQueueFilter(e.target.value)}>
+          <MenuItem value="">Todas</MenuItem>
+          <MenuItem value="__none__">Sin cola</MenuItem>
+          {queueNames.map((n) => <MenuItem key={n} value={n}>{n}</MenuItem>)}
+        </TextField>
+        {filtering && visibleProcs.length > 0 && (
+          <Button size="small" variant="outlined" startIcon={<PlayArrowIcon />} onClick={runFiltered}>
+            Ejecutar {visibleProcs.length === allProcs.length ? "todos" : `estos (${visibleProcs.length})`}
+          </Button>
+        )}
+      </Stack>
 
       <TableContainer component={Paper} variant="outlined">
         <Table size="small">
@@ -160,6 +166,7 @@ export default function ProcessesPage() {
               <TableCell>Nombre</TableCell>
               <TableCell>Key</TableCell>
               <TableCell>Tipo</TableCell>
+              <TableCell>Cola</TableCell>
               <TableCell>Entrypoint</TableCell>
               <TableCell>Conc.</TableCell>
               {showVersionCol && <TableCell>Versión</TableCell>}
@@ -169,51 +176,21 @@ export default function ProcessesPage() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {[...visibleGroups.entries()].map(([queueName, group]) => {
-              const expanded = searching || !collapsed.has(queueName);
-              return (
-                <GroupSection
-                  key={queueName}
-                  label={queueName}
-                  count={group.length}
-                  expanded={expanded}
-                  onToggle={() => toggleGroup(queueName)}
-                  onRunGroup={() => runGroup(queueName, groups.get(queueName) || group)}
-                  colSpan={6 + showVersionCol + showChainedCol}
-                >
-                  {expanded && group.map((p) => (
-                    <ProcRow key={p.id} p={p} navigate={navigate} onRun={runOne(p)}
-                      onDelete={() => removeOne(p)} isRunning={running.has(p.id)}
-                      showVersionCol={showVersionCol} showChainedCol={showChainedCol} />
-                  ))}
-                </GroupSection>
-              );
-            })}
+            {visibleProcs.map((p) => (
+              <ProcRow key={p.id} p={p} navigate={navigate} onRun={runOne(p)}
+                onDelete={() => removeOne(p)} isRunning={running.has(p.id)}
+                showVersionCol={showVersionCol} showChainedCol={showChainedCol} />
+            ))}
 
-            {visibleLoose.length > 0 && (
-              <GroupSection
-                label="Sin cola asociada" count={visibleLoose.length} muted
-                expanded={searching || !collapsed.has("__loose__")}
-                onToggle={() => toggleGroup("__loose__")}
-                colSpan={6 + showVersionCol + showChainedCol}
-              >
-                {(searching || !collapsed.has("__loose__")) && visibleLoose.map((p) => (
-                  <ProcRow key={p.id} p={p} navigate={navigate} onRun={runOne(p)}
-                    onDelete={() => removeOne(p)} isRunning={running.has(p.id)}
-                    showVersionCol={showVersionCol} showChainedCol={showChainedCol} />
-                ))}
-              </GroupSection>
-            )}
-
-            {(procs || []).length === 0 && (
-              <TableRow><TableCell colSpan={7 + showVersionCol + showChainedCol}>
+            {allProcs.length === 0 && (
+              <TableRow><TableCell colSpan={colCount}>
                 <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>Sin procesos.</Typography>
               </TableCell></TableRow>
             )}
             {noResults && (
-              <TableRow><TableCell colSpan={7 + showVersionCol + showChainedCol}>
+              <TableRow><TableCell colSpan={colCount}>
                 <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-                  Ningún proceso coincide con "{search}".
+                  Ningún proceso coincide con los filtros{search ? ` "${search}"` : ""}.
                 </Typography>
               </TableCell></TableRow>
             )}
@@ -247,7 +224,7 @@ export default function ProcessesPage() {
             </TextField>
             <TextField select label={form.kind === "standalone" ? "Cola asociada (opcional)" : "Cola"} value={form.queue_name} onChange={(e) => setForm({ ...form, queue_name: e.target.value })}>
               <MenuItem value="">(ninguna)</MenuItem>
-              {(queues || []).map((q) => <MenuItem key={q.id} value={q.name}>{q.name}</MenuItem>)}
+              {(queues || []).map((qq) => <MenuItem key={qq.id} value={qq.name}>{qq.name}</MenuItem>)}
             </TextField>
             <TextField type="number" label="Concurrencia máxima" value={form.max_concurrency} onChange={(e) => setForm({ ...form, max_concurrency: e.target.value })} />
             {err && <Typography variant="caption" color="error">{err}</Typography>}
@@ -272,40 +249,23 @@ export default function ProcessesPage() {
   );
 }
 
-function GroupSection({ label, count, onRunGroup, muted, colSpan, expanded, onToggle, children }) {
-  return (
-    <>
-      <TableRow sx={{ bgcolor: "action.hover", cursor: onToggle ? "pointer" : "default" }} onClick={onToggle}>
-        <TableCell colSpan={colSpan} sx={{ py: 1 }}>
-          <Stack direction="row" spacing={1.5} alignItems="center">
-            <IconButton size="small" onClick={onToggle} sx={{ p: 0.25 }}>
-              {expanded ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
-            </IconButton>
-            <LayersIcon fontSize="small" color={muted ? "disabled" : "action"} />
-            <Typography variant="subtitle2" color={muted ? "text.secondary" : "text.primary"} sx={{ flexGrow: 1 }}>
-              {label}
-            </Typography>
-            <Chip size="small" variant="outlined" label={`${count} proceso(s)`} />
-            {onRunGroup && (
-              <Button size="small" variant="contained" startIcon={<PlayArrowIcon />}
-                onClick={(e) => { e.stopPropagation(); onRunGroup(); }}>
-                Ejecutar todos
-              </Button>
-            )}
-          </Stack>
-        </TableCell>
-      </TableRow>
-      {children}
-    </>
-  );
-}
-
 function ProcRow({ p, navigate, onRun, onDelete, isRunning, showVersionCol, showChainedCol }) {
   return (
     <TableRow hover sx={{ cursor: "pointer" }} onClick={() => navigate(`/processes/${p.id}`)}>
       <TableCell><Typography variant="body2" fontWeight={600} color="text.primary">{p.name}</Typography></TableCell>
       <TableCell><Typography variant="caption" color="text.secondary">{p.key}</Typography></TableCell>
       <TableCell><ProcessKindChip kind={p.kind} /></TableCell>
+      <TableCell>
+        {p.queue_name ? (
+          <Chip size="small" variant="outlined" icon={<LayersIcon />} label={p.queue_name} />
+        ) : (
+          <Tooltip title="No tiene cola asignada — click para editar el proceso y asociarle una">
+            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: "italic" }}>
+              No posee
+            </Typography>
+          </Tooltip>
+        )}
+      </TableCell>
       <TableCell><Typography variant="caption" color="text.secondary">{p.bot_dir}/{p.entrypoint}</Typography></TableCell>
       <TableCell>{p.max_concurrency}</TableCell>
       {showVersionCol && <TableCell>{p.active_version || <EmptyValue />}</TableCell>}
